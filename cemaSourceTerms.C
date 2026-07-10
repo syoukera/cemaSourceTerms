@@ -101,7 +101,6 @@ int main(int argc,char *argv[])
                 {
                     chem_Yi[cellI] = -chemResid[cellI] / Vcells[cellI];
                 }
-                volScalarField
             }
             tRi.clear();
 
@@ -176,7 +175,6 @@ int main(int argc,char *argv[])
                 mesh,
                 dimensionedScalar("zero", dimMass/dimVolume/dimTime, 0.0)
             );
-
             {
                 const scalarField& Vcells = mesh.V();
                 volScalarField diffResidField = tdiffMat() & Yi;  // tmp<volScalarField>を実体化
