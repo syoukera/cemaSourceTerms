@@ -10,18 +10,34 @@ int main(int argc,char *argv[])
     #include "createTime.H"
     #include "createMesh.H"
 
-    // runTime.setTime(instant(0.1, "0.1"), 0);
+    // if (args.args().size() != 2)
+    // {
+    //     FatalErrorInFunction
+    //         << "Usage: " << args.executable() << " <time-folder>"
+    //         << exit(FatalError);
+    // }
+
+    // const word timeFolder(args.args()[1]);
 
     instantList times = runTime.times();
     label timeI = -1;
     forAll(times,i)
     {
-        if (mag(times[i].value() - 0.05) < SMALL)
+        // if (times[i].name() == timeFolder)
+        if (mag(times[i].value() - 1.2e-08) < SMALL)
         {
             timeI = i;
             break;
         }
     }
+
+    // if (timeI == -1)
+    // {
+    //     FatalErrorInFunction
+    //         << "Time folder " << timeFolder << " was not found."
+    //         << exit(FatalError);
+    // }
+
     runTime.setTime(times[timeI], timeI);
 
     #include "createFields.H"
@@ -104,37 +120,6 @@ int main(int argc,char *argv[])
             }
             tRi.clear();
 
-            // // --------------------------------------------------
-            // // chemical項: ω̇i [kg/m³/s]
-            // // --------------------------------------------------
-            // tmp<fvScalarMatrix> tRi = reaction->R(Yi);
-            // const scalarField& srcRi = tRi->source();  // [kg/s] per cell
-            
-            // // 対角成分の寄与が無視できるか確認
-            // Info << "R diag min/max: " 
-            //     << gMin(tRi->diag()) << " / " << gMax(tRi->diag()) << endl;
-
-
-            // volScalarField chem_Yi
-            // (
-            //     IOobject
-            //     (
-            //         "chem_" + name,
-            //         runTime.timeName(),
-            //         mesh,
-            //         IOobject::NO_READ,
-            //         IOobject::AUTO_WRITE
-            //     ),
-            //     mesh,
-            //     dimensionedScalar("zero", dimMass/dimVolume/dimTime, 0.0)
-            // );
-            // // セル体積で割って [kg/m³/s] に変換
-            // forAll(chem_Yi, cellI)
-            // {
-            //     chem_Yi[cellI] = srcRi[cellI] / mesh.V()[cellI];
-            // }
-            // tRi.clear();
-
             // --------------------------------------------------
             // 対流項: ∇·(ρu Yi) [kg/m³/s]
             // fvc::div で陽的に計算
@@ -185,57 +170,6 @@ int main(int argc,char *argv[])
                 }
             }
             tdiffMat.clear();
-
-            // --------------------------------------------------
-            // 拡散項: ∇·ji [kg/m³/s]
-            // divj が返す fvScalarMatrix から source() で取り出す
-            // --------------------------------------------------
-            // tmp<fvScalarMatrix> tdiffMat = thermophysicalTransport->divj(Yi);
-            // const scalarField& srcDiff = tdiffMat->source();  // [kg/s] per cell
-
-            // Info << "diff diag min/max: " << gMin(tdiffMat->diag()) << " / "
-            //     << gMax(tdiffMat->diag()) << endl;
-
-
-            // volScalarField diff_Yi
-            // (
-            //     IOobject
-            //     (   
-            //         "diff_" + name,
-            //         runTime.timeName(),
-            //         mesh,
-            //         IOobject::NO_READ,
-            //         IOobject::AUTO_WRITE
-            //     ),
-            //     mesh,
-            //     dimensionedScalar("zero", dimMass/dimVolume/dimTime, 0.0)
-            // );
-            // forAll(diff_Yi, cellI)
-            // {
-            //     diff_Yi[cellI] = srcDiff[cellI] / mesh.V()[cellI];
-            // }
-            // tdiffMat.clear();
-
-            // // --------------------------------------------------
-            // // ddt
-            // // --------------------------------------------------
-            // volScalarField ddtYi
-            // (
-            //     IOobject
-            //     (
-            //         "ddt_"+name,
-            //         runTime.timeName(),
-            //         mesh
-            //     ),
-            //     fvc::ddt(rho,Yi)
-            // );
-
-            // Info
-            //     << "ddt min/max "
-            //     << gMin(ddtYi)
-            //     << " / "
-            //     << gMax(ddtYi)
-            //     << endl;
 
             // --------------------------------------------------
             // non-chemical = -conv - diff
