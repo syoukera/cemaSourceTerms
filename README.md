@@ -15,3 +15,17 @@ docker run -it --rm \
   openfoam/openfoam8-paraview56:8 \
   bash
 ```
+
+Command too build the utilitie is shown bellow
+
+```
+cd applications/utilities/cemaSourceTerms/
+wmake
+```
+
+To test utilitie in tutorial case, type bellow commands.
+
+```
+cd run/counterFlowFlame2D/
+cemaSourceTerms 
+```
