@@ -27,5 +27,11 @@ To test utilitie in tutorial case, type bellow commands.
 
 ```
 cd run/counterFlowFlame2D/
-cemaSourceTerms 
+cemaSourceTerms <time-folder>
+```
+
+For example:
+
+```
+cemaSourceTerms 0.05
 ```

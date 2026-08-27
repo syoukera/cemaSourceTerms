@@ -1,0 +1,8 @@
+{
+  "folders": [
+    { "path": "/home/openfoam/run" },
+    { "path": "/home/openfoam/applications" },
+    // { "path": "/home/openfoam/platforms" },
+    // { "path": "/home/openfoam/KU_MILD" }
+  ]
+}
