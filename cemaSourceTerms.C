@@ -6,37 +6,38 @@
 
 int main(int argc,char *argv[])
 {
+    argList::validArgs.append("time-folder");
+
     #include "setRootCase.H"
     #include "createTime.H"
     #include "createMesh.H"
 
-    // if (args.args().size() != 2)
-    // {
-    //     FatalErrorInFunction
-    //         << "Usage: " << args.executable() << " <time-folder>"
-    //         << exit(FatalError);
-    // }
+    if (args.args().size() != 2)
+    {
+        FatalErrorInFunction
+            << "Usage: " << args.executable() << " <time-folder>"
+            << exit(FatalError);
+    }
 
-    // const word timeFolder(args.args()[1]);
+    const word timeFolder(args.args()[1]);
 
     instantList times = runTime.times();
     label timeI = -1;
     forAll(times,i)
     {
-        // if (times[i].name() == timeFolder)
-        if (mag(times[i].value() - 1.2e-08) < SMALL)
+        if (times[i].name() == timeFolder)
         {
             timeI = i;
             break;
         }
     }
 
-    // if (timeI == -1)
-    // {
-    //     FatalErrorInFunction
-    //         << "Time folder " << timeFolder << " was not found."
-    //         << exit(FatalError);
-    // }
+    if (timeI == -1)
+    {
+        FatalErrorInFunction
+            << "Time folder " << timeFolder << " was not found."
+            << exit(FatalError);
+    }
 
     runTime.setTime(times[timeI], timeI);
 
