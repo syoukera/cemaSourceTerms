@@ -82,6 +82,9 @@ int main(int argc,char *argv[])
         )
     );
 
+    thermo.correct();
+
+    runTime.setDeltaT(1e-12);
     reaction->correct();
 
     forAll(Y, i)
@@ -121,6 +124,32 @@ int main(int argc,char *argv[])
             }
             tRi.clear();
 
+            // tmp<fvScalarMatrix> tRi = reaction->R(Yi);
+
+            // volScalarField chem_Yi
+            // (
+            //     IOobject
+            //     (
+            //         "chem_" + name,
+            //         runTime.timeName(),
+            //         mesh,
+            //         IOobject::NO_READ,
+            //         IOobject::AUTO_WRITE
+            //     ),
+            //     mesh,
+            //     dimensionedScalar("zero", dimMass/dimVolume/dimTime, 0.0)
+            // );
+            // const scalarField& source = tRi().source();
+            // const scalarField& Vcells = mesh.V();
+            // forAll(chem_Yi, cellI)
+            // {
+            //     chem_Yi[cellI] = -source[cellI] / Vcells[cellI];
+            // }
+            // tRi.clear();
+
+            // volScalarField Qdot(reaction->Qdot());
+            // Info << "Qdot min/max " << gMin(Qdot) << " / " << gMax(Qdot) << endl;
+
             // --------------------------------------------------
             // 対流項: ∇·(ρu Yi) [kg/m³/s]
             // fvc::div で陽的に計算
@@ -135,8 +164,10 @@ int main(int argc,char *argv[])
                     IOobject::NO_READ,
                     IOobject::AUTO_WRITE
                 ),
-                mvConvection->fvcDiv(phi, Yi)
+                mesh,
+                dimensionedScalar("zero", dimMass/dimVolume/dimTime, 0.0)
             );
+            conv_Yi = mvConvection->fvcDiv(phi, Yi);
 
             // --------------------------------------------------
             // 拡散項: ∇·ji [kg/m³/s]
@@ -238,6 +269,34 @@ int main(int argc,char *argv[])
             Info << "conv min/max " << gMin(conv_Yi) << " / " << gMax(conv_Yi) << endl;
             Info << "diff min/max " << gMin(diff_Yi) << " / " << gMax(diff_Yi) << endl;
 
+            Info<< "Qdot = " << reaction->Qdot()()[0] << endl;   // 発熱速度との整合性チェック
+
+        }
+    }
+
+    forAll(Y, i)
+    {
+        if (composition.active(i))
+        {
+            volScalarField& Yi = Y[i];
+            tmp<fvScalarMatrix> tRi = reaction->R(Yi);
+
+            const scalarField& src = tRi().source();
+            const scalar V0 = mesh.V()[0];
+
+            Info<< Yi.name()
+                << "  hasDiag = " << tRi().hasDiag()
+                << "  source-based rate = " << -src[0]/V0
+                << endl;
+
+            if (tRi().hasDiag())
+            {
+                // 陰的項がある場合のみ diag / (mat & Yi) を使う
+                volScalarField full = tRi() & Yi;
+                Info<< "  full(mat&Y) rate = " << -full[0]/V0 << endl;
+            }
+
+            tRi.clear();
         }
     }
 
