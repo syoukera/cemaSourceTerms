@@ -177,13 +177,7 @@ int main(int argc,char *argv[])
                 dimensionedScalar("zero", dimMass/dimVolume/dimTime, 0.0)
             );
             {
-                const scalarField& Vcells = mesh.V();
-                volScalarField diffResidField = tdiffMat() & Yi;  // tmp<volScalarField>を実体化
-                const scalarField& diffResid = diffResidField.primitiveField();
-                forAll(diff_Yi, cellI)
-                {
-                    diff_Yi[cellI] = diffResid[cellI] / Vcells[cellI];
-                }
+                diff_Yi = tdiffMat() & Yi;
             }
             tdiffMat.clear();
 
@@ -201,9 +195,11 @@ int main(int argc,char *argv[])
                     IOobject::AUTO_WRITE
                 ),
                 - conv_Yi - diff_Yi
+                // - conv_Yi // for check conv_Yi
             );
 
             chem_Yi.write();
+            diff_Yi.write();
             nonChem_Yi.write();
 
 
@@ -258,31 +254,98 @@ int main(int argc,char *argv[])
         }
     }
 
-    // forAll(Y, i)
-    // {
-    //     if (composition.active(i))
-    //     {
-    //         volScalarField& Yi = Y[i];
-    //         tmp<fvScalarMatrix> tRi = reaction->R(Yi);
+    // ========================================================
+    // CEMA: EEqn の chemical / non-chemical 項の計算・出力
+    // ========================================================
+    volScalarField& he = thermo.he();
 
-    //         const scalarField& src = tRi().source();
-    //         const scalar V0 = mesh.V()[0];
+    volScalarField chem_h
+    (
+        IOobject
+        (
+            "chem_h",
+            runTime.timeName(),
+            mesh,
+            IOobject::NO_READ,
+            IOobject::AUTO_WRITE
+        ),
+        reaction->Qdot()
+    );
 
-    //         Info<< Yi.name()
-    //             << "  hasDiag = " << tRi().hasDiag()
-    //             << "  source-based rate = " << -src[0]/V0
-    //             << endl;
+    volScalarField conv_h
+    (
+        IOobject
+        (
+            "conv_h",
+            runTime.timeName(),
+            mesh,
+            IOobject::NO_READ,
+            IOobject::AUTO_WRITE
+        ),
+        mesh,
+        dimensionedScalar("zero", chem_h.dimensions(), 0.0)
+    );
+    conv_h = mvConvection->fvcDiv(phi, he);
 
-    //         if (tRi().hasDiag())
-    //         {
-    //             // 陰的項がある場合のみ diag / (mat & Yi) を使う
-    //             volScalarField full = tRi() & Yi;
-    //             Info<< "  full(mat&Y) rate = " << -full[0]/V0 << endl;
-    //         }
+    tmp<fvScalarMatrix> tdiffMatE = thermophysicalTransport->divq(he);
+    volScalarField diff_h
+    (
+        IOobject
+        (
+            "diff_h",
+            runTime.timeName(),
+            mesh,
+            IOobject::NO_READ,
+            IOobject::AUTO_WRITE
+        ),
+        mesh,
+        dimensionedScalar("zero", chem_h.dimensions(), 0.0)
+    );
+    diff_h = tdiffMatE() & he;
+    tdiffMatE.clear();
 
-    //         tRi.clear();
-    //     }
-    // }
+    volScalarField nonChem_h
+    (
+        IOobject
+        (
+            "nonChem_h",
+            runTime.timeName(),
+            mesh,
+            IOobject::NO_READ,
+            IOobject::AUTO_WRITE
+        ),
+        -conv_h - diff_h
+    );
+
+    volScalarField residual_h
+    (
+        IOobject
+        (
+            "residual_h",
+            runTime.timeName(),
+            mesh,
+            IOobject::NO_READ,
+            IOobject::AUTO_WRITE
+        ),
+        chem_h - nonChem_h
+    );
+
+    chem_h.write();
+    conv_h.write();
+    diff_h.write();
+    nonChem_h.write();
+    residual_h.write();
+    he.write();
+
+    Info<< "energy terms" << nl
+        << "  chem_h [kg/m/s^3] min/max : "
+        << gMin(chem_h) << " / " << gMax(chem_h) << nl
+        << "  nonChem_h [kg/m/s^3] min/max : "
+        << gMin(nonChem_h) << " / " << gMax(nonChem_h) << nl
+        << "  residual_h [kg/m/s^3] max|mean| : "
+        << gMax(mag(residual_h)()) << " / "
+        << residual_h.weightedAverage(mesh.V()).value() << nl
+        << endl;
 
     return 0;
 }
