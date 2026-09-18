@@ -84,8 +84,14 @@ int main(int argc,char *argv[])
 
     thermo.correct();
 
-    runTime.setDeltaT(1e-12);
-    reaction->correct();
+    // flag for calculation of chemical source terms
+    // default: false
+    const bool flagCalculateChem = false;
+
+    if (flagCalculateChem) {
+        runTime.setDeltaT(1e-12);
+        reaction->correct();
+    }
 
     forAll(Y, i)
     {
@@ -93,46 +99,6 @@ int main(int argc,char *argv[])
         {
             volScalarField& Yi = Y[i];
             const word& name = Yi.name();
-
-            // --------------------------------------------------
-            // chemical項: ω̇i [kg/m³/s]
-            // R(Yi) は右辺項 → -(mat & Yi)/V が陽的評価
-            // --------------------------------------------------
-
-            // NOTE:
-            // この source() ベースの抽出は combustionModel = laminar / PaSR / EDC 系
-            // （fvm::Sp() を使わず Su += chemistryPtr_->RR(i) のみで構成される実装）
-            // でのみ厳密に正しい。
-            // 将来 singleStepCombustion 系（infinitelyFastChemistry, diffusion, FSD 等）
-            // や semiImplicit 処理を使うモデルに切り替える場合は、
-            // fvm::Sp() による陰的項が加わるため本コードの前提が崩れる。
-            // その際は (tRi() & Yi) ベースの実装、または diag()/hasDiag() を
-            // チェックした上での再検証が必要。
-            tmp<fvScalarMatrix> tRi = reaction->R(Yi);
-
-            volScalarField chem_Yi
-            (
-                IOobject
-                (
-                    "chem_" + name,
-                    runTime.timeName(),
-                    mesh,
-                    IOobject::NO_READ,
-                    IOobject::AUTO_WRITE
-                ),
-                mesh,
-                dimensionedScalar("zero", dimMass/dimVolume/dimTime, 0.0)
-            );
-            const scalarField& source = tRi().source();
-            const scalarField& Vcells = mesh.V();
-            forAll(chem_Yi, cellI)
-            {
-                chem_Yi[cellI] = -source[cellI] / Vcells[cellI];
-            }
-            tRi.clear();
-
-            volScalarField Qdot(reaction->Qdot());
-            Info << "Qdot min/max " << gMin(Qdot) << " / " << gMax(Qdot) << endl;
 
             // --------------------------------------------------
             // 対流項: ∇·(ρu Yi) [kg/m³/s]
@@ -198,59 +164,112 @@ int main(int argc,char *argv[])
                 // - conv_Yi // for check conv_Yi
             );
 
-            chem_Yi.write();
-            diff_Yi.write();
+            // conv_Yi.write();
+            // diff_Yi.write();
             nonChem_Yi.write();
-
-
-            // Info<< name
-            //     << "  chem   [kg/m3/s] min/max: "
-            //     << gMin(chem_Yi)    << " / " << gMax(chem_Yi)    << nl
-            //     << "  nonChem[kg/m3/s] min/max: "
-            //     << gMin(nonChem_Yi) << " / " << gMax(nonChem_Yi) << nl
-            //     << endl;
-
-            // --------------------------------------------------
-            // 残差: chem - nonChem
-            // ddt = 0になって収束していればゼロになるはず
-            // --------------------------------------------------
-            volScalarField residual_Yi
-            (
-                IOobject
-                (
-                    "residual_" + name,
-                    runTime.timeName(),
-                    mesh,
-                    IOobject::NO_READ,
-                    IOobject::AUTO_WRITE
-                ),
-                chem_Yi - nonChem_Yi
-            );
-
-            // 残差の統計（ゼロに近いほど整合している）
-            const scalar resMax  = gMax(mag(residual_Yi)());
-            const scalar resMean = residual_Yi.weightedAverage(mesh.V()).value();
-            const scalar chemMax = gMax(mag(chem_Yi)());
 
             Info<< name << nl
                 // << "  ddt      [kg/m3/s] min/max : "
                 // << gMin(ddt_Yi)      << " / " << gMax(ddt_Yi)      << nl
-                << "  chem     [kg/m3/s] min/max : "
-                << gMin(chem_Yi)     << " / " << gMax(chem_Yi)     << nl
+                // << "  chem     [kg/m3/s] min/max : "
+                // << gMin(chem_Yi)     << " / " << gMax(chem_Yi)     << nl
                 << "  nonChem  [kg/m3/s] min/max : "
                 << gMin(nonChem_Yi)  << " / " << gMax(nonChem_Yi)  << nl
-                << "  residual [kg/m3/s] max|mean|: "
-                << resMax << " / " << resMean << nl
-                << "  relative residual (resMax/chemMax): "
-                << (chemMax > SMALL ? resMax/chemMax : 0.0) << nl
+                // << "  residual [kg/m3/s] max|mean|: "
+                // << resMax << " / " << resMean << nl
+                // << "  relative residual (resMax/chemMax): "
+                // << (chemMax > SMALL ? resMax/chemMax : 0.0) << nl
                 << endl;
 
-            
             Info << "conv min/max " << gMin(conv_Yi) << " / " << gMax(conv_Yi) << endl;
             Info << "diff min/max " << gMin(diff_Yi) << " / " << gMax(diff_Yi) << endl;
 
-            // Info<< "Qdot = " << reaction->Qdot()()[0] << endl;   // 発熱速度との整合性チェック
 
+                    
+            if (flagCalculateChem) {
+
+                // --------------------------------------------------
+                // chemical項: ω̇i [kg/m³/s]
+                // R(Yi) は右辺項 → -(mat & Yi)/V が陽的評価
+                // --------------------------------------------------
+
+                // NOTE:
+                // この source() ベースの抽出は combustionModel = laminar / PaSR / EDC 系
+                // （fvm::Sp() を使わず Su += chemistryPtr_->RR(i) のみで構成される実装）
+                // でのみ厳密に正しい。
+                // 将来 singleStepCombustion 系（infinitelyFastChemistry, diffusion, FSD 等）
+                // や semiImplicit 処理を使うモデルに切り替える場合は、
+                // fvm::Sp() による陰的項が加わるため本コードの前提が崩れる。
+                // その際は (tRi() & Yi) ベースの実装、または diag()/hasDiag() を
+                // チェックした上での再検証が必要。
+                tmp<fvScalarMatrix> tRi = reaction->R(Yi);
+
+                volScalarField chem_Yi
+                (
+                    IOobject
+                    (
+                        "chem_" + name,
+                        runTime.timeName(),
+                        mesh,
+                        IOobject::NO_READ,
+                        IOobject::AUTO_WRITE
+                    ),
+                    mesh,
+                    dimensionedScalar("zero", dimMass/dimVolume/dimTime, 0.0)
+                );
+                const scalarField& source = tRi().source();
+                const scalarField& Vcells = mesh.V();
+                forAll(chem_Yi, cellI)
+                {
+                    chem_Yi[cellI] = -source[cellI] / Vcells[cellI];
+                }
+                tRi.clear();
+
+                volScalarField Qdot(reaction->Qdot());
+                Info << "Qdot min/max " << gMin(Qdot) << " / " << gMax(Qdot) << endl;
+                
+                chem_Yi.write();
+
+                // --------------------------------------------------
+                // 残差: chem - nonChem
+                // ddt = 0になって収束していればゼロになるはず
+                // --------------------------------------------------
+                volScalarField residual_Yi
+                (
+                    IOobject
+                    (
+                        "residual_" + name,
+                        runTime.timeName(),
+                        mesh,
+                        IOobject::NO_READ,
+                        IOobject::AUTO_WRITE
+                    ),
+                    chem_Yi - nonChem_Yi
+                );
+
+                // 残差の統計（ゼロに近いほど整合している）
+                const scalar resMax  = gMax(mag(residual_Yi)());
+                const scalar resMean = residual_Yi.weightedAverage(mesh.V()).value();
+                const scalar chemMax = gMax(mag(chem_Yi)());
+
+                Info<< name << nl
+                    // << "  ddt      [kg/m3/s] min/max : "
+                    // << gMin(ddt_Yi)      << " / " << gMax(ddt_Yi)      << nl
+                    << "  chem     [kg/m3/s] min/max : "
+                    << gMin(chem_Yi)     << " / " << gMax(chem_Yi)     << nl
+                    << "  nonChem  [kg/m3/s] min/max : "
+                    << gMin(nonChem_Yi)  << " / " << gMax(nonChem_Yi)  << nl
+                    << "  residual [kg/m3/s] max|mean|: "
+                    << resMax << " / " << resMean << nl
+                    << "  relative residual (resMax/chemMax): "
+                    << (chemMax > SMALL ? resMax/chemMax : 0.0) << nl
+                    << endl;
+
+                // Info << "conv min/max " << gMin(conv_Yi) << " / " << gMax(conv_Yi) << endl;
+                // Info << "diff min/max " << gMin(diff_Yi) << " / " << gMax(diff_Yi) << endl;
+
+                // Info<< "Qdot = " << reaction->Qdot()()[0] << endl;   // 発熱速度との整合性チェック
+            }
         }
     }
 
@@ -258,19 +277,6 @@ int main(int argc,char *argv[])
     // CEMA: EEqn の chemical / non-chemical 項の計算・出力
     // ========================================================
     volScalarField& he = thermo.he();
-
-    volScalarField chem_h
-    (
-        IOobject
-        (
-            "chem_h",
-            runTime.timeName(),
-            mesh,
-            IOobject::NO_READ,
-            IOobject::AUTO_WRITE
-        ),
-        reaction->Qdot()
-    );
 
     volScalarField conv_h
     (
@@ -283,7 +289,8 @@ int main(int argc,char *argv[])
             IOobject::AUTO_WRITE
         ),
         mesh,
-        dimensionedScalar("zero", chem_h.dimensions(), 0.0)
+        // dimensionedScalar("zero", chem_h.dimensions(), 0.0)
+        dimensionedScalar("zero", dimEnergy/dimVolume/dimTime, 0.0)
     );
     conv_h = mvConvection->fvcDiv(phi, he);
 
@@ -299,7 +306,8 @@ int main(int argc,char *argv[])
             IOobject::AUTO_WRITE
         ),
         mesh,
-        dimensionedScalar("zero", chem_h.dimensions(), 0.0)
+        // dimensionedScalar("zero", chem_h.dimensions(), 0.0)
+        dimensionedScalar("zero", dimEnergy/dimVolume/dimTime, 0.0)
     );
     diff_h = tdiffMatE() & he;
     tdiffMatE.clear();
@@ -317,35 +325,56 @@ int main(int argc,char *argv[])
         -conv_h - diff_h
     );
 
-    volScalarField residual_h
-    (
-        IOobject
-        (
-            "residual_h",
-            runTime.timeName(),
-            mesh,
-            IOobject::NO_READ,
-            IOobject::AUTO_WRITE
-        ),
-        chem_h - nonChem_h
-    );
-
-    chem_h.write();
-    conv_h.write();
-    diff_h.write();
+    // he.write();
+    // conv_h.write();
+    // diff_h.write();
     nonChem_h.write();
-    residual_h.write();
-    he.write();
-
+    
     Info<< "energy terms" << nl
-        << "  chem_h [kg/m/s^3] min/max : "
-        << gMin(chem_h) << " / " << gMax(chem_h) << nl
         << "  nonChem_h [kg/m/s^3] min/max : "
         << gMin(nonChem_h) << " / " << gMax(nonChem_h) << nl
-        << "  residual_h [kg/m/s^3] max|mean| : "
-        << gMax(mag(residual_h)()) << " / "
-        << residual_h.weightedAverage(mesh.V()).value() << nl
         << endl;
+
+    if (flagCalculateChem) {
+        volScalarField chem_h
+        (
+            IOobject
+            (
+                "chem_h",
+                runTime.timeName(),
+                mesh,
+                IOobject::NO_READ,
+                IOobject::AUTO_WRITE
+            ),
+            reaction->Qdot()
+        );
+
+        volScalarField residual_h
+        (
+            IOobject
+            (
+                "residual_h",
+                runTime.timeName(),
+                mesh,
+                IOobject::NO_READ,
+                IOobject::AUTO_WRITE
+            ),
+            chem_h - nonChem_h
+        );
+
+        chem_h.write();
+        residual_h.write();
+
+        Info<< "energy terms" << nl
+            << "  chem_h [kg/m/s^3] min/max : "
+            << gMin(chem_h) << " / " << gMax(chem_h) << nl
+            // << "  nonChem_h [kg/m/s^3] min/max : "
+            // << gMin(nonChem_h) << " / " << gMax(nonChem_h) << nl
+            << "  residual_h [kg/m/s^3] max|mean| : "
+            << gMax(mag(residual_h)()) << " / "
+            << residual_h.weightedAverage(mesh.V()).value() << nl
+            << endl;
+    }
 
     return 0;
 }
