@@ -4,5 +4,28 @@
     { "path": "/home/openfoam/applications" },
     // { "path": "/home/openfoam/platforms" },
     // { "path": "/home/openfoam/KU_MILD" }
-  ]
+  ],
+  "settings": {
+    "chat.tools.terminal.autoApprove": {
+      "git status": true,
+      "git diff": true,
+      "git log": true,
+      "echo": true,
+      "find": true,
+      "ls": true,
+      "head": true,
+      "grep": true,
+      "printf": true,
+      "rg": true,
+      "/^npm (test|run|install)\\b.*$/": true,
+      "/^pnpm (test|run|install)\\b.*$/": true,
+      "/^uv\\b.*$/": true,
+
+      "rm": false,
+      "del": false,
+      "sudo": false,
+      "/git reset --hard/": false,
+      "/git push --force/": false
+    }
+  }
 }
