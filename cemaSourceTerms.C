@@ -7,6 +7,12 @@
 int main(int argc,char *argv[])
 {
     argList::validArgs.append("time-folder");
+    
+    argList::addBoolOption
+    (
+        "calculateChem",
+        "Calculate chemical source terms"
+    );
 
     #include "setRootCase.H"
     #include "createTime.H"
@@ -15,7 +21,8 @@ int main(int argc,char *argv[])
     if (args.args().size() != 2)
     {
         FatalErrorInFunction
-            << "Usage: " << args.executable() << " <time-folder>"
+            << "Usage: " << args.executable()
+            << " <time-folder> [-calculateChem]"
             << exit(FatalError);
     }
 
@@ -255,10 +262,10 @@ int main(int argc,char *argv[])
         << gMin(nonChem_enthalpy) << " / " << gMax(nonChem_enthalpy) << nl
         << endl;
 
-
     // flag for calculation of chemical source terms
     // default: false
-    const bool flagCalculateChem = true;
+    // const bool flagCalculateChem = args.found("calculateChem");
+    const bool flagCalculateChem = args.optionFound("calculateChem");
 
     if (flagCalculateChem) {
 
