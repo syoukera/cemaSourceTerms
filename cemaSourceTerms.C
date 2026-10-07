@@ -84,15 +84,6 @@ int main(int argc,char *argv[])
 
     thermo.correct();
 
-    // flag for calculation of chemical source terms
-    // default: false
-    const bool flagCalculateChem = true;
-
-    if (flagCalculateChem) {
-        runTime.setDeltaT(1e-12);
-        reaction->correct();
-    }
-
     forAll(Y, i)
     {
         if (composition.active(i))
@@ -174,50 +165,6 @@ int main(int argc,char *argv[])
 
             Info << "conv min/max " << gMin(conv_Yi) << " / " << gMax(conv_Yi) << endl;
             Info << "diff min/max " << gMin(diff_Yi) << " / " << gMax(diff_Yi) << endl;
-
-
-                    
-            if (flagCalculateChem) {
-
-                // --------------------------------------------------
-                // chemical項: ω̇i [kg/m³/s]
-                // R(Yi) は右辺項 → -(mat & Yi)/V が陽的評価
-                // --------------------------------------------------
-
-                // NOTE:
-                // この source() ベースの抽出は combustionModel = laminar / PaSR / EDC 系
-                // （fvm::Sp() を使わず Su += chemistryPtr_->RR(i) のみで構成される実装）
-                // でのみ厳密に正しい。
-                // 将来 singleStepCombustion 系（infinitelyFastChemistry, diffusion, FSD 等）
-                // や semiImplicit 処理を使うモデルに切り替える場合は、
-                // fvm::Sp() による陰的項が加わるため本コードの前提が崩れる。
-                // その際は (tRi() & Yi) ベースの実装、または diag()/hasDiag() を
-                // チェックした上での再検証が必要。
-                tmp<fvScalarMatrix> tRi = reaction->R(Yi);
-
-                volScalarField chem_Yi
-                (
-                    IOobject
-                    (
-                        "chem_" + name,
-                        runTime.timeName(),
-                        mesh,
-                        IOobject::NO_READ,
-                        IOobject::AUTO_WRITE
-                    ),
-                    mesh,
-                    dimensionedScalar("zero", dimMass/dimVolume/dimTime, 0.0)
-                );
-                const scalarField& source = tRi().source();
-                const scalarField& Vcells = mesh.V();
-                forAll(chem_Yi, cellI)
-                {
-                    chem_Yi[cellI] = -source[cellI] / Vcells[cellI];
-                }
-                tRi.clear();
-
-                chem_Yi.write();
-            }
         }
     }
 
@@ -308,7 +255,64 @@ int main(int argc,char *argv[])
         << gMin(nonChem_enthalpy) << " / " << gMax(nonChem_enthalpy) << nl
         << endl;
 
+
+    // flag for calculation of chemical source terms
+    // default: false
+    const bool flagCalculateChem = true;
+
     if (flagCalculateChem) {
+
+        runTime.setDeltaT(1e-12);
+        reaction->correct();
+
+        forAll(Y, i)
+        {
+            if (composition.active(i))
+            {
+                volScalarField& Yi = Y[i];
+                const word& name = Yi.name();
+
+                // --------------------------------------------------
+                // chemical項: ω̇i [kg/m³/s]
+                // R(Yi) は右辺項 → -(mat & Yi)/V が陽的評価
+                // --------------------------------------------------
+
+                // NOTE:
+                // この source() ベースの抽出は combustionModel = laminar / PaSR / EDC 系
+                // （fvm::Sp() を使わず Su += chemistryPtr_->RR(i) のみで構成される実装）
+                // でのみ厳密に正しい。
+                // 将来 singleStepCombustion 系（infinitelyFastChemistry, diffusion, FSD 等）
+                // や semiImplicit 処理を使うモデルに切り替える場合は、
+                // fvm::Sp() による陰的項が加わるため本コードの前提が崩れる。
+                // その際は (tRi() & Yi) ベースの実装、または diag()/hasDiag() を
+                // チェックした上での再検証が必要。
+                tmp<fvScalarMatrix> tRi = reaction->R(Yi);
+
+                volScalarField chem_Yi
+                (
+                    IOobject
+                    (
+                        "chem_" + name,
+                        runTime.timeName(),
+                        mesh,
+                        IOobject::NO_READ,
+                        IOobject::AUTO_WRITE
+                    ),
+                    mesh,
+                    dimensionedScalar("zero", dimMass/dimVolume/dimTime, 0.0)
+                );
+                const scalarField& source = tRi().source();
+                const scalarField& Vcells = mesh.V();
+                forAll(chem_Yi, cellI)
+                {
+                    chem_Yi[cellI] = -source[cellI] / Vcells[cellI];
+                }
+                tRi.clear();
+
+                chem_Yi.write();
+            }
+        }
+
         volScalarField chem_enthalpy
         (
             IOobject
