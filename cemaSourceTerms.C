@@ -161,7 +161,6 @@ int main(int argc,char *argv[])
                     IOobject::AUTO_WRITE
                 ),
                 - conv_Yi - diff_Yi
-                // - conv_Yi // for check conv_Yi
             );
 
             conv_Yi.write();
@@ -169,16 +168,8 @@ int main(int argc,char *argv[])
             nonChem_Yi.write();
 
             Info<< name << nl
-                // << "  ddt      [kg/m3/s] min/max : "
-                // << gMin(ddt_Yi)      << " / " << gMax(ddt_Yi)      << nl
-                // << "  chem     [kg/m3/s] min/max : "
-                // << gMin(chem_Yi)     << " / " << gMax(chem_Yi)     << nl
                 << "  nonChem  [kg/m3/s] min/max : "
                 << gMin(nonChem_Yi)  << " / " << gMax(nonChem_Yi)  << nl
-                // << "  residual [kg/m3/s] max|mean|: "
-                // << resMax << " / " << resMean << nl
-                // << "  relative residual (resMax/chemMax): "
-                // << (chemMax > SMALL ? resMax/chemMax : 0.0) << nl
                 << endl;
 
             Info << "conv min/max " << gMin(conv_Yi) << " / " << gMax(conv_Yi) << endl;
@@ -225,50 +216,7 @@ int main(int argc,char *argv[])
                 }
                 tRi.clear();
 
-                // volScalarField Qdot(reaction->Qdot());
-                // Info << "Qdot min/max " << gMin(Qdot) << " / " << gMax(Qdot) << endl;
-                
                 chem_Yi.write();
-
-                // --------------------------------------------------
-                // 残差: chem - nonChem
-                // ddt = 0になって収束していればゼロになるはず
-                // --------------------------------------------------
-                // volScalarField residual_Yi
-                // (
-                //     IOobject
-                //     (
-                //         "residual_" + name,
-                //         runTime.timeName(),
-                //         mesh,
-                //         IOobject::NO_READ,
-                //         IOobject::AUTO_WRITE
-                //     ),
-                //     chem_Yi - nonChem_Yi
-                // );
-
-                // // 残差の統計（ゼロに近いほど整合している）
-                // const scalar resMax  = gMax(mag(residual_Yi)());
-                // const scalar resMean = residual_Yi.weightedAverage(mesh.V()).value();
-                // const scalar chemMax = gMax(mag(chem_Yi)());
-
-                // Info<< name << nl
-                //     // << "  ddt      [kg/m3/s] min/max : "
-                //     // << gMin(ddt_Yi)      << " / " << gMax(ddt_Yi)      << nl
-                //     << "  chem     [kg/m3/s] min/max : "
-                //     << gMin(chem_Yi)     << " / " << gMax(chem_Yi)     << nl
-                //     << "  nonChem  [kg/m3/s] min/max : "
-                //     << gMin(nonChem_Yi)  << " / " << gMax(nonChem_Yi)  << nl
-                //     << "  residual [kg/m3/s] max|mean|: "
-                //     << resMax << " / " << resMean << nl
-                //     << "  relative residual (resMax/chemMax): "
-                //     << (chemMax > SMALL ? resMax/chemMax : 0.0) << nl
-                //     << endl;
-
-                // Info << "conv min/max " << gMin(conv_Yi) << " / " << gMax(conv_Yi) << endl;
-                // Info << "diff min/max " << gMin(diff_Yi) << " / " << gMax(diff_Yi) << endl;
-
-                // Info<< "Qdot = " << reaction->Qdot()()[0] << endl;   // 発熱速度との整合性チェック
             }
         }
     }
@@ -374,30 +322,12 @@ int main(int argc,char *argv[])
             reaction->Qdot()
         );
 
-        // volScalarField residual_enthalpy
-        // (
-        //     IOobject
-        //     (
-        //         "residual_enthalpy",
-        //         runTime.timeName(),
-        //         mesh,
-        //         IOobject::NO_READ,
-        //         IOobject::AUTO_WRITE
-        //     ),
-        //     chem_enthalpy - nonChem_enthalpy
-        // );
-
         chem_enthalpy.write();
         // residual_enthalpy.write();
 
         Info<< "energy terms" << nl
             << "  chem_enthalpy [kg/m/s^3] min/max : "
             << gMin(chem_enthalpy) << " / " << gMax(chem_enthalpy) << nl
-            // << "  nonChem_enthalpy [kg/m/s^3] min/max : "
-            // << gMin(nonChem_enthalpy) << " / " << gMax(nonChem_enthalpy) << nl
-            // << "  residual_enthalpy [kg/m/s^3] max|mean| : "
-            // << gMax(mag(residual_enthalpy)()) << " / "
-            // << residual_enthalpy.weightedAverage(mesh.V()).value() << nl
             << endl;
     }
 
