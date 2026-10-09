@@ -253,8 +253,8 @@ int main(int argc,char *argv[])
 
     rho.write();
     // he.write();
-    // conv_enthalpy.write();
-    // diff_enthalpy.write();
+    conv_enthalpy.write();
+    diff_enthalpy.write();
     nonChem_enthalpy.write();
     
     Info<< "energy terms" << nl
@@ -268,8 +268,19 @@ int main(int argc,char *argv[])
     const bool flagCalculateChem = args.optionFound("calculateChem");
 
     if (flagCalculateChem) {
+        
+        IOdictionary timeDict
+        (
+            IOobject
+            (
+                "time", runTime.timeName(), "uniform", runTime,
+                IOobject::MUST_READ, IOobject::NO_WRITE, false
+            )
+        );
+        const scalar dtSim = readScalar(timeDict.lookup("deltaT"));
+        Info<< "dtSim = " << dtSim << endl;
 
-        runTime.setDeltaT(1e-12);
+        runTime.setDeltaT(dtSim);
         reaction->correct();
 
         forAll(Y, i)
