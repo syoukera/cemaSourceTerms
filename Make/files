@@ -1,0 +1,3 @@
+cemaSourceTerms.C
+
+EXE = $(FOAM_USER_APPBIN)/cemaSourceTerms
