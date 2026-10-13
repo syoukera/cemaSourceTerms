@@ -99,10 +99,30 @@ volScalarField diff_enthalpy
     diffCond_enthalpy + diffsh + diffFlux_enthalpy
 );
 
+// --------------------------------------------------
+// 圧力項 [W/m³]: EEqn 左辺の -dpdt (e のときは +div(phiv,p)) を右辺へ移したもの
+// pEqn.H と同じく保存済みの p, p_0 から fvc::ddt(p) で評価する
+// (ソルバーではこの値が次のステップの EEqn で使われる)
+// --------------------------------------------------
+volScalarField dpdt_enthalpy("dpdt_enthalpy", 0*conv_enthalpy);
+if (he.name() == "e")
+{
+    dpdt_enthalpy = -fvc::div
+    (
+        fvc::absolute(phi/fvc::interpolate(rho), U),
+        p,
+        "div(phiv,p)"
+    );
+}
+else if (thermo.dpdt())
+{
+    dpdt_enthalpy = fvc::ddt(p);
+}
+
 volScalarField nonChem_enthalpy
 (
     "nonChem_enthalpy",
-    -conv_enthalpy - diff_enthalpy
+    -conv_enthalpy - diff_enthalpy + dpdt_enthalpy
 );
 
 // ソルバー出力 mixAlpha との比較用
@@ -112,6 +132,7 @@ mixAlpha_post.write();
 rho.write();
 conv_enthalpy.write();
 diff_enthalpy.write();
+dpdt_enthalpy.write();
 nonChem_enthalpy.write();
 
 if (writeDiffTerms)

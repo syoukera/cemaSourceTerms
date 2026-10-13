@@ -31,7 +31,8 @@ the terms explicitly from the saved fields:
 | – conduction | −∇·((α + μt/Prt)∇h) | `diffCond_enthalpy` | W/m³ |
 | – species enthalpy (α) | Σᵢ ∇·(α hs,ᵢ ∇Yi) (`diffsh`) | `diffsh_enthalpy` | W/m³ |
 | – species enthalpy flux | −∇·(Σᵢ hs,ᵢ ρDᵢ…) (`−fvc::div(vk)`) | `diffFlux_enthalpy` | W/m³ |
-| Non-chemical | −conv − diff | `nonChem_enthalpy` | W/m³ |
+| Pressure work | ∂p/∂t (`fvc::ddt(p)`; for `e`: −∇·(p u)) | `dpdt_enthalpy` | W/m³ |
+| Non-chemical | −conv − diff + dpdt | `nonChem_enthalpy` | W/m³ |
 | Chemical *(optional)* | heat release `reaction->Qdot()` | `chem_enthalpy` | W/m³ |
 
 The correction-velocity, molecular-weight, Soret and species-enthalpy terms
@@ -43,8 +44,16 @@ written only with `-writeDiffTerms`.
 solver output `mixAlpha`) are also written. All fields go into the selected
 time folder.
 
-As in `main`, the kinetic energy terms (`ddt(ρK)`, `div(φ,K)`) and `dpdt` are
-not included in `nonChem_enthalpy`.
+The kinetic energy terms (`ddt(ρK)`, `div(φ,K)`) are not included in
+`nonChem_enthalpy`.
+
+`dpdt_enthalpy` is evaluated from the saved `p` and `p_0` with
+`fvc::ddt(p)`, in the same way as `pEqn.H` (no pressure iteration is needed).
+It is zero when `dpdt no` is set in `thermophysicalProperties`. The solver
+computes `dpdt` at the end of each time step and uses it in the `EEqn` of the
+next step. So the value written for time n is the one the solver uses in step
+n+1, and it differs by O(Δt) from the value used in step n. On the first step
+after a restart, the solver uses `dpdt = 0`.
 
 ## Requirements
 
@@ -59,6 +68,8 @@ not included in `nonChem_enthalpy`.
 - In the selected time folder: `T`, `p`, `U`, the species mass fractions, and
   any turbulence fields the case needs. `phi` is read if it is there and
   computed from `rho` and `U` if it is not.
+- `p_0` (the old-time pressure, written by the solver) in the selected time
+  folder. Without it, `dpdt_enthalpy` is zero.
 - The case's `system/fvSchemes` must define `div(phi,Yi_h)`. The convection
   terms are evaluated with that scheme.
 
