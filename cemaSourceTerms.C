@@ -14,6 +14,12 @@ int main(int argc,char *argv[])
         "Calculate chemical source terms"
     );
 
+    argList::addBoolOption
+    (
+        "writeDiffTerms",
+        "Write the individual diffusion terms"
+    );
+
     #include "setRootCase.H"
     #include "createTime.H"
     #include "createMesh.H"
@@ -22,7 +28,7 @@ int main(int argc,char *argv[])
     {
         FatalErrorInFunction
             << "Usage: " << args.executable()
-            << " <time-folder> [-calculateChem]"
+            << " <time-folder> [-calculateChem] [-writeDiffTerms]"
             << exit(FatalError);
     }
 
@@ -50,6 +56,22 @@ int main(int argc,char *argv[])
 
     #include "createFields.H"
     #include "createFieldRefs.H"
+
+    // reactingDNS の輸送物性 (solvers/reactingDNS/transport)
+    #include "readChemistryProperties.H"
+
+    #include "createDiffFields.H"
+    #include "createTDiffFields.H"
+    #include "createLambdaFields.H"
+    #include "createMuFields.H"
+
+    #include "readTranData.H"
+    #include "readBinaryDiff.H"
+    #include "readThermalDiff.H"
+    #include "readSpeciesLambda.H"
+    #include "readSpeciesMu.H"
+
+    const bool writeDiffTerms = args.optionFound("writeDiffTerms");
 
     Info<< "cemaSourceTerms start" << endl;
 
@@ -91,89 +113,10 @@ int main(int argc,char *argv[])
 
     thermo.correct();
 
-    forAll(Y, i)
-    {
-        if (composition.active(i))
-        {
-            volScalarField& Yi = Y[i];
-            const word& name = Yi.name();
+    // 保存済みの T, p, Y から Diff[i], X, MW, mixAlpha, TDRatio を計算
+    #include "updateTransProperties.H"
 
-            // --------------------------------------------------
-            // 対流項: ∇·(ρu Yi) [kg/m³/s]
-            // fvc::div で陽的に計算
-            // --------------------------------------------------
-            volScalarField conv_Yi
-            (
-                IOobject
-                (
-                    "conv_" + name,
-                    runTime.timeName(),
-                    mesh,
-                    IOobject::NO_READ,
-                    IOobject::AUTO_WRITE
-                ),
-                mesh,
-                dimensionedScalar("zero", dimMass/dimVolume/dimTime, 0.0)
-            );
-            conv_Yi = mvConvection->fvcDiv(phi, Yi);
-
-            // --------------------------------------------------
-            // 拡散項: ∇·ji [kg/m³/s]
-            // divj は fvm::laplacian 相当の純線形行列
-            // source() はゼロ → (mat & Yi) で陽的評価する
-            //
-            // (mat & Yi) = A*Yi - H(Yi) = 残差ベクトル [kg/s]
-            // 左辺に置かれた項なので符号はそのまま: +∇·ji
-            // --------------------------------------------------
-            tmp<fvScalarMatrix> tdiffMat = thermophysicalTransport->divj(Yi);
-
-            volScalarField diff_Yi
-            (
-                IOobject
-                (
-                    "diff_" + name,
-                    runTime.timeName(),
-                    mesh,
-                    IOobject::NO_READ,
-                    IOobject::AUTO_WRITE
-                ),
-                mesh,
-                dimensionedScalar("zero", dimMass/dimVolume/dimTime, 0.0)
-            );
-            {
-                diff_Yi = tdiffMat() & Yi;
-            }
-            tdiffMat.clear();
-
-            // --------------------------------------------------
-            // non-chemical = -conv - diff
-            // --------------------------------------------------
-            volScalarField nonChem_Yi
-            (
-                IOobject
-                (
-                    "nonChem_" + name,
-                    runTime.timeName(),
-                    mesh,
-                    IOobject::NO_READ,
-                    IOobject::AUTO_WRITE
-                ),
-                - conv_Yi - diff_Yi
-            );
-
-            conv_Yi.write();
-            diff_Yi.write();
-            nonChem_Yi.write();
-
-            Info<< name << nl
-                << "  nonChem  [kg/m3/s] min/max : "
-                << gMin(nonChem_Yi)  << " / " << gMax(nonChem_Yi)  << nl
-                << endl;
-
-            Info << "conv min/max " << gMin(conv_Yi) << " / " << gMax(conv_Yi) << endl;
-            Info << "diff min/max " << gMin(diff_Yi) << " / " << gMax(diff_Yi) << endl;
-        }
-    }
+    #include "YEqnTerms.H"
 
     // #include <iomanip>   // setprecision 用（必要なら）
 
@@ -196,71 +139,7 @@ int main(int argc,char *argv[])
     // ========================================================
     // CEMA: EEqn の chemical / non-chemical 項の計算・出力
     // ========================================================
-    volScalarField& he = thermo.he();
-
-    volScalarField conv_enthalpy
-    (
-        IOobject
-        (
-            "conv_enthalpy",
-            runTime.timeName(),
-            mesh,
-            IOobject::NO_READ,
-            IOobject::AUTO_WRITE
-        ),
-        mesh,
-        // dimensionedScalar("zero", chem_enthalpy.dimensions(), 0.0)
-        dimensionedScalar("zero", dimEnergy/dimVolume/dimTime, 0.0)
-    );
-    conv_enthalpy = mvConvection->fvcDiv(phi, he);
-
-    tmp<fvScalarMatrix> tdiffMatE = thermophysicalTransport->divq(he);
-    volScalarField diff_enthalpy
-    (
-        IOobject
-        (
-            "diff_enthalpy",
-            runTime.timeName(),
-            mesh,
-            IOobject::NO_READ,
-            IOobject::AUTO_WRITE
-        ),
-        mesh,
-        // dimensionedScalar("zero", chem_enthalpy.dimensions(), 0.0)
-        dimensionedScalar("zero", dimEnergy/dimVolume/dimTime, 0.0)
-    );
-    diff_enthalpy = tdiffMatE() & he;
-    tdiffMatE.clear();
-
-    volScalarField nonChem_enthalpy
-    (
-        IOobject
-        (
-            "nonChem_enthalpy",
-            runTime.timeName(),
-            mesh,
-            IOobject::NO_READ,
-            IOobject::AUTO_WRITE
-        ),
-        -conv_enthalpy - diff_enthalpy
-    );
-    
-    volScalarField alphaEff(thermophysicalTransport->alphaEff());
-    alphaEff.write();
-    
-    // volScalarField divPhi("divPhi", fvc::div(phi));
-    // divPhi.write();
-
-    rho.write();
-    // he.write();
-    conv_enthalpy.write();
-    diff_enthalpy.write();
-    nonChem_enthalpy.write();
-    
-    Info<< "energy terms" << nl
-        << "  nonChem_enthalpy [kg/m/s^3] min/max : "
-        << gMin(nonChem_enthalpy) << " / " << gMax(nonChem_enthalpy) << nl
-        << endl;
+    #include "EEqnTerms.H"
 
     // flag for calculation of chemical source terms
     // default: false

@@ -1,0 +1,127 @@
+volScalarField& he = thermo.he();
+
+volScalarField conv_enthalpy("conv_enthalpy", mvConvection->fvcDiv(phi, he));
+
+// --------------------------------------------------
+// 拡散項: ∇·q [W/m³]（左辺に置かれた項なので符号はそのまま）
+//   diffCond  : -∇·((α + μt/Prt)∇h)
+//   diffsh    :  Σ ∇·(α hs,i ∇Yi)          differentialDiffusion on のみ
+//   diffFlux  : -∇·(Σ hs,i ρ Vi Yi)         differentialDiffusion on のみ
+// --------------------------------------------------
+volScalarField diffCond_enthalpy
+(
+    "diffCond_enthalpy",
+    (-fvm::laplacian(mixAlpha + mut/Prt, he)) & he
+);
+
+volScalarField diffFlux_enthalpy
+(
+    IOobject("diffFlux_enthalpy", runTime.timeName(), mesh),
+    mesh,
+    dimensionedScalar("zero", dimEnergy/dimVolume/dimTime, 0.0)
+);
+
+vk *= 0;
+diffsh *= 0;
+
+if (differentialDiffusion)
+{
+    // 化学種 i の顕エンタルピー hs,i(p, T) を Hsi に設定
+    auto setHsi = [&](const label i)
+    {
+        forAll(Hsi, celli)
+        {
+            Hsi[celli] = composition.Hs(i, p[celli], T[celli]);
+        }
+
+        volScalarField::Boundary& HsiBf = Hsi.boundaryFieldRef();
+
+        forAll(HsiBf, patchi)
+        {
+            scalarField& HsiPatch = HsiBf[patchi];
+            const scalarField& pp = p.boundaryField()[patchi];
+            const scalarField& Tp = T.boundaryField()[patchi];
+
+            forAll(HsiPatch, facei)
+            {
+                HsiPatch[facei] = composition.Hs(i, pp[facei], Tp[facei]);
+            }
+        }
+    };
+
+    surfaceScalarField sumOfOtherSpecies("sumOfOtherSpecies", 0*phiUc);
+    volScalarField Yt(0.0*Y[0]);
+
+    forAll(Y, i)
+    {
+        if (i != inertIndex)
+        {
+            const volScalarField& Yi = Y[i];
+            const volScalarField& Diffi = Diff[i];
+
+            setHsi(i);
+
+            // 化学種拡散フラックス (補正速度込み) [kg/s]
+            volVectorField speciesFluxVol
+            (
+                rho*Diffi*fvc::grad(Yi)
+              + Yi*rho*Diffi*fvc::grad(MW)/MW
+              - Yi*DiffError
+            );
+            if (hasSoret(i))
+            {
+                speciesFluxVol +=
+                    -rho*Diffi*TDRatio(i)*fvc::grad(T)*Yi/(T*(X[i] + SMALL));
+            }
+            const surfaceScalarField speciesFlux
+            (
+                fvc::interpolate(speciesFluxVol) & mesh.Sf()
+            );
+
+            vk += fvc::interpolate(Hsi)*speciesFlux;
+            sumOfOtherSpecies += speciesFlux;
+            diffsh += fvc::laplacian(mixAlpha*Hsi, Yi);
+            Yt += Yi;
+        }
+    }
+
+    // 不活性種: ソルバーと同じくフラックスは -Σ(他種), 質量分率は 1 - Yt
+    setHsi(inertIndex);
+    vk += fvc::interpolate(Hsi)*-sumOfOtherSpecies;
+    diffsh += fvc::laplacian(mixAlpha*Hsi, 1 - Yt);
+
+    diffFlux_enthalpy = -fvc::div(vk);
+}
+
+volScalarField diff_enthalpy
+(
+    "diff_enthalpy",
+    diffCond_enthalpy + diffsh + diffFlux_enthalpy
+);
+
+volScalarField nonChem_enthalpy
+(
+    "nonChem_enthalpy",
+    -conv_enthalpy - diff_enthalpy
+);
+
+// ソルバー出力 mixAlpha との比較用
+volScalarField mixAlpha_post("mixAlpha_post", mixAlpha);
+mixAlpha_post.write();
+
+rho.write();
+conv_enthalpy.write();
+diff_enthalpy.write();
+nonChem_enthalpy.write();
+
+if (writeDiffTerms)
+{
+    diffCond_enthalpy.write();
+    volScalarField("diffsh_enthalpy", diffsh).write();
+    diffFlux_enthalpy.write();
+}
+
+Info<< "energy terms" << nl
+    << "  nonChem_enthalpy [kg/m/s^3] min/max : "
+    << gMin(nonChem_enthalpy) << " / " << gMax(nonChem_enthalpy) << nl
+    << endl;
