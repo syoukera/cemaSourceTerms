@@ -119,10 +119,25 @@ else if (thermo.dpdt())
     dpdt_enthalpy = fvc::ddt(p);
 }
 
+// --------------------------------------------------
+// 運動エネルギー項 [W/m³]: ddt(ρK) + ∇·(φK)（左辺に置かれた項）
+// K = 0.5|U|² は解像された流れの運動エネルギー (laminar でもゼロでない)
+// ρ の旧時刻値は保存されていないので、連続の式 ∂ρ/∂t = -∇·φ を使い
+//   ddt(ρK) = ρ ddt(K) + K_0 ∂ρ/∂t = ρ ddt(K) - K_0 ∇·φ
+// として評価する（K_0 は保存済みの U_0 から計算）
+// --------------------------------------------------
+K.oldTime() = 0.5*magSqr(U.oldTime());
+
+volScalarField kin_enthalpy
+(
+    "kin_enthalpy",
+    rho*fvc::ddt(K) - K.oldTime()*fvc::div(phi) + fvc::div(phi, K)
+);
+
 volScalarField nonChem_enthalpy
 (
     "nonChem_enthalpy",
-    -conv_enthalpy - diff_enthalpy + dpdt_enthalpy
+    -conv_enthalpy - diff_enthalpy + dpdt_enthalpy - kin_enthalpy
 );
 
 // ソルバー出力 mixAlpha との比較用
@@ -133,6 +148,7 @@ rho.write();
 conv_enthalpy.write();
 diff_enthalpy.write();
 dpdt_enthalpy.write();
+kin_enthalpy.write();
 nonChem_enthalpy.write();
 
 if (writeDiffTerms)
