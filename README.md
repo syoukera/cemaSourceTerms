@@ -110,7 +110,7 @@ can coexist with `cemaSourceTerms` built from `main`.
 Run it from the case directory:
 
 ```bash
-cemaSourceTermsDNS <time-folder> [-calculateChem] [-writeDiffTerms]
+cemaSourceTermsDNS <time-folder> [-calculateChem] [-writeDiffTerms] [-cema ...]
 ```
 
 - `<time-folder>`: name of an existing time directory, for example `0.05`.
@@ -142,6 +142,68 @@ cemaSourceTermsDNS 0.005 -calculateChem  # non-chemical + chemical terms
   need a different extraction. See the comment in
   [cemaSourceTerms.C](cemaSourceTerms.C).
 
+### CEMA (`-cema`)
+
+`-cema` runs an eigen-analysis of the chemical Jacobian in each cell and
+writes the propagation index α (Xu et al., PROCI 37, 2019):
+
+- The state vector is y = [T, Y_0 … Y_{N−2}] (pyJac order; the last pyJac
+  species, N2, is left out). The pyJac code gives J = ∂ω/∂y.
+- The chemical explosive mode (CEM) λ_e is the eigenvalue with the largest
+  real part, after the conservation modes are removed. The conservation modes
+  are the `nConserved` eigenvalues with the smallest |λ|. b_e is its left
+  eigenvector, computed as an eigenvector of Jᵀ with Eigen.
+- φ_ω = b_e·ω, φ_s = b_e·s, α = φ_s/φ_ω.
+
+| Option | Values | Meaning |
+| --- | --- | --- |
+| `-cemaChem` | `pyjac` (default) | ω = instantaneous pyJac `dydt` |
+| | `openfoam` | ω_Yi = `chem_<Yi>`/ρ, ω_T = (`chem_enthalpy` − Σ hs,i `chem_<Yi>`)/(ρ cp). Implies `-calculateChem` (rates averaged over `deltaT`) |
+| `-cemaFrame` | `lagrangian` (default) | s_Yi = −`diff_<Yi>`/ρ, s_h = −`diff_enthalpy` + `dpdt_enthalpy` − `kin_enthalpy` |
+| | `eulerian` | also adds the non-conservative convection −(∇·(φY) − Y∇·φ) |
+| `-cemaNConserved` | integer | number of conservation modes removed (default from the pyJac wrapper: elements + 1) |
+
+The temperature components come from hs = Σ Yi hs,i(T):
+ρ cp dT/dt = d(ρhs)/dt − ρ Σ hs,i dYi/dt. The inert species term is
+−Σ (other species), as in the solver. Only `energy sensibleEnthalpy` is
+supported.
+
+Output fields:
+
+| Field | Meaning |
+| --- | --- |
+| `cema_lambda` | Re(λ_e) [1/s] |
+| `cema_lambdaLog` | sign(λ_e)·log10(1 + \|λ_e\|) |
+| `cema_phiOmega`, `cema_phiS` | φ_ω, φ_s |
+| `cema_alpha` | α = φ_s/φ_ω |
+| `cema_mode` | 0: λ_e < 0 (non-explosive), 1: \|α\| < 1 (auto-ignition), 2: α > 1 (assisted ignition), 3: α < −1 (extinction) |
+| `cema_dTdtChem`, `cema_dTdtNonChem` | ω_T, s_T [K/s] |
+
+The log lists all eigenvalues at the cells with the highest and lowest T, so
+you can check the conservation modes. Where φ_ω ≈ 0 (cold inflow), |α| becomes
+very large. Mask these cells with a threshold on λ_e when you plot.
+
+```bash
+cemaSourceTermsDNS 0.005 -cema
+cemaSourceTermsDNS 0.005 -cema -cemaChem openfoam -cemaFrame eulerian
+```
+
+#### pyJac and Eigen
+
+- The pyJac code is linked as a static library. Build it first:
+  `make -C ../pyJac_out_h2_openfoam` creates `libpyjac.a`.
+  [cemaPyJac.c](../pyJac_out_h2_openfoam/cemaPyJac.c) holds the species
+  names (same order as `mechanism.h`) and the number of conservation modes.
+  The pyJac species are matched to the OpenFOAM species by name.
+- To change the mechanism, add `cemaPyJac.{h,c}` and the `makefile` to the
+  new pyJac directory, then set `PYJAC_DIR` in [Make/options](Make/options).
+- wmake does not track `libpyjac.a`. After you rebuild the library, delete
+  `$FOAM_USER_APPBIN/cemaSourceTermsDNS` and run `wmake` again.
+- Eigen 3.4.0 (header-only) is expected at
+  `applications/ThirdParty/eigen-3.4.0` (`EIGEN_DIR` in Make/options).
+  Eigen and pyJac are used only in [cemaKernel.C](cemaKernel.C), which
+  does not include `fvCFD.H`.
+
 ### Differences from the solver
 
 - The solver evaluates the transport properties, the correction velocity and
@@ -162,6 +224,8 @@ cemaSourceTermsDNS 0.005 -calculateChem  # non-chemical + chemical terms
 | [cemaSourceTerms.C](cemaSourceTerms.C) | Main program: argument handling, transport properties and chemical terms |
 | [YEqnTerms.H](YEqnTerms.H) | Species convection / diffusion terms (reactingDNS form) |
 | [EEqnTerms.H](EEqnTerms.H) | Enthalpy convection / diffusion terms (reactingDNS form) |
+| [cemaTerms.H](cemaTerms.H) | CEMA: state/source vectors per cell, output fields |
+| [cemaKernel.C](cemaKernel.C) | CEMA: eigen-analysis (Eigen), α |
 | [createFields.H](createFields.H) | Builds thermo, U, phi, turbulence, thermophysical transport and combustion models |
 | [createFieldRefs.H](createFieldRefs.H) | Convenience references (`psi`, `T`, inert specie index) |
 | [Make/](Make/) | `wmake` build files |

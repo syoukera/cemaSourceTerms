@@ -1,4 +1,9 @@
+PYJAC_DIR = ../pyJac_out_h2_openfoam
+EIGEN_DIR = ../../ThirdParty/eigen-3.4.0
+
 EXE_INC = \
+    -I$(PYJAC_DIR) \
+    -I$(EIGEN_DIR) \
     -I../../solvers/reactingDNS/transport \
     -I$(LIB_SRC)/finiteVolume/lnInclude \
     -I$(LIB_SRC)/meshTools/lnInclude \
@@ -28,4 +33,5 @@ EXE_LIBS = \
     -lfluidThermophysicalModels \
     -lchemistryModel \
     -lODE \
-    -lcombustionModels
+    -lcombustionModels \
+    -L$(PYJAC_DIR) -lpyjac -lm

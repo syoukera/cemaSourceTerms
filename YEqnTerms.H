@@ -38,6 +38,10 @@ const surfaceScalarField phiUc("phiUc", fvc::interpolate(DiffError) & mesh.Sf())
 
 const dimensionedScalar zeroYTerm("zero", dimMass/dimVolume/dimTime, 0.0);
 
+// CEMA 用に各化学種の対流項・拡散項を保持する
+PtrList<volScalarField> convY(Y.size());
+PtrList<volScalarField> diffY(Y.size());
+
 forAll(Y, i)
 {
     if (composition.active(i))
@@ -115,6 +119,9 @@ forAll(Y, i)
         // non-chemical = -conv - diff
         // --------------------------------------------------
         volScalarField nonChem_Yi("nonChem_" + name, - conv_Yi - diff_Yi);
+
+        convY.set(i, new volScalarField(conv_Yi));
+        diffY.set(i, new volScalarField(diff_Yi));
 
         conv_Yi.write();
         diff_Yi.write();

@@ -3,6 +3,8 @@
 #include "psiReactionThermo.H"
 #include "CombustionModel.H"
 #include "psiReactionThermophysicalTransportModel.H"
+#include "cemaKernel.H"
+#include "cemaPyJac.h"
 
 int main(int argc,char *argv[])
 {
@@ -20,6 +22,36 @@ int main(int argc,char *argv[])
         "Write the individual diffusion terms"
     );
 
+    argList::addBoolOption
+    (
+        "cema",
+        "Chemical explosive mode analysis (eigenvalue, propagation index)"
+    );
+
+    argList::addOption
+    (
+        "cemaChem",
+        "pyjac|openfoam",
+        "Chemical source term for CEMA: instantaneous pyJac dydt (default)"
+        " or chem_<Yi>/chem_enthalpy (implies -calculateChem)"
+    );
+
+    argList::addOption
+    (
+        "cemaFrame",
+        "lagrangian|eulerian",
+        "Non-chemical term for CEMA: diffusion only (default)"
+        " or diffusion + convection"
+    );
+
+    argList::addOption
+    (
+        "cemaNConserved",
+        "label",
+        "Number of conservation modes excluded from the eigenvalues"
+        " (default: value set in the pyJac wrapper)"
+    );
+
     #include "setRootCase.H"
     #include "createTime.H"
     #include "createMesh.H"
@@ -29,6 +61,8 @@ int main(int argc,char *argv[])
         FatalErrorInFunction
             << "Usage: " << args.executable()
             << " <time-folder> [-calculateChem] [-writeDiffTerms]"
+            << " [-cema] [-cemaChem pyjac|openfoam]"
+            << " [-cemaFrame lagrangian|eulerian] [-cemaNConserved <n>]"
             << exit(FatalError);
     }
 
@@ -144,7 +178,34 @@ int main(int argc,char *argv[])
     // flag for calculation of chemical source terms
     // default: false
     // const bool flagCalculateChem = args.found("calculateChem");
-    const bool flagCalculateChem = args.optionFound("calculateChem");
+    const bool flagCema = args.optionFound("cema");
+    const word cemaChem(args.optionLookupOrDefault<word>("cemaChem", "pyjac"));
+    const word cemaFrame
+    (
+        args.optionLookupOrDefault<word>("cemaFrame", "lagrangian")
+    );
+
+    if (cemaChem != "pyjac" && cemaChem != "openfoam")
+    {
+        FatalErrorInFunction
+            << "Unknown -cemaChem " << cemaChem
+            << ". Valid options: pyjac, openfoam" << exit(FatalError);
+    }
+    if (cemaFrame != "lagrangian" && cemaFrame != "eulerian")
+    {
+        FatalErrorInFunction
+            << "Unknown -cemaFrame " << cemaFrame
+            << ". Valid options: lagrangian, eulerian" << exit(FatalError);
+    }
+
+    // -cemaChem openfoam は chem_<Yi>, chem_enthalpy を使うので計算が必要
+    const bool flagCalculateChem =
+        args.optionFound("calculateChem")
+     || (flagCema && cemaChem == "openfoam");
+
+    // CEMA 用に chem 項を保持する
+    PtrList<volScalarField> chemY(Y.size());
+    autoPtr<volScalarField> chemEnthalpyPtr;
 
     if (flagCalculateChem) {
         
@@ -207,6 +268,7 @@ int main(int argc,char *argv[])
                 tRi.clear();
 
                 chem_Yi.write();
+                chemY.set(i, new volScalarField(chem_Yi));
             }
         }
 
@@ -224,12 +286,21 @@ int main(int argc,char *argv[])
         );
 
         chem_enthalpy.write();
+        chemEnthalpyPtr.reset(new volScalarField(chem_enthalpy));
         // residual_enthalpy.write();
 
         Info<< "energy terms" << nl
             << "  chem_enthalpy [kg/m/s^3] min/max : "
             << gMin(chem_enthalpy) << " / " << gMax(chem_enthalpy) << nl
             << endl;
+    }
+
+    // ========================================================
+    // CEMA: ヤコビアンの固有値解析と propagation index
+    // ========================================================
+    if (flagCema)
+    {
+        #include "cemaTerms.H"
     }
 
     return 0;
