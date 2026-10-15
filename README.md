@@ -154,6 +154,8 @@ writes the propagation index α (Xu et al., PROCI 37, 2019):
   are the `nConserved` eigenvalues with the smallest |λ|. b_e is its left
   eigenvector, computed as an eigenvector of Jᵀ with Eigen.
 - φ_ω = b_e·ω, φ_s = b_e·s, α = φ_s/φ_ω.
+  The sign of an eigenvector is arbitrary, so b_e is oriented to give
+  φ_ω ≥ 0. α does not depend on the orientation.
 
 | Option | Values | Meaning |
 | --- | --- | --- |

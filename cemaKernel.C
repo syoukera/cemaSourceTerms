@@ -70,6 +70,13 @@ cemaResult cemaAnalyse
     r.phiOmega = be.dot(omegaVec);
     r.phiS = be.dot(sVec);
 
+    // 固有ベクトルの向きは任意なので、b_e·ω >= 0 となる向きにそろえる
+    if (r.phiOmega < 0)
+    {
+        r.phiOmega = -r.phiOmega;
+        r.phiS = -r.phiS;
+    }
+
     const double vSmall = std::numeric_limits<double>::min();
     if (std::abs(r.phiOmega) > vSmall)
     {
@@ -77,9 +84,8 @@ cemaResult cemaAnalyse
     }
     else
     {
-        // phiOmega ~ 0: 符号付きの大きな値
-        const double sgn = (r.phiS >= 0 ? 1.0 : -1.0)*(r.phiOmega >= 0 ? 1.0 : -1.0);
-        r.alpha = sgn*1e30;
+        // phiOmega ~ 0: 符号付きの大きな値 (phiOmega >= 0)
+        r.alpha = (r.phiS >= 0 ? 1.0 : -1.0)*1e30;
     }
 
     return r;

@@ -9,7 +9,7 @@ struct cemaResult
 {
     double lambdaRe;   // CEM の固有値の実部 [1/s]
     double lambdaIm;   // CEM の固有値の虚部 [1/s]
-    double phiOmega;   // b_e . omega
+    double phiOmega;   // b_e . omega (b_e は b_e . omega >= 0 の向き)
     double phiS;       // b_e . s
     double alpha;      // phiS/phiOmega (propagation index)
 };
